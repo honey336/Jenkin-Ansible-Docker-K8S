@@ -1,83 +1,120 @@
 # Setup Kubernetes (K8s) Cluster on AWS
 
 
-1. Create Ubuntu EC2 instance
-1. install AWSCLI
-   ```sh
-    sudo apt-get update
-    curl https://s3.amazonaws.com/aws-cli/awscli-bundle.zip -o awscli-bundle.zip
-    apt install unzip python
-    unzip awscli-bundle.zip
-    #sudo apt-get install unzip - if you dont have unzip in your system
-    ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
-    ```
+<<kops
+Honeywell Technologies  
+honeybussy336@gmailcom  
+kops
+Setup Kubernetes (K8s) Cluster on AWS Using KOPS
 
-1. Install kubectl on ubuntu instance
-   ```sh
-   curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
-    chmod +x ./kubectl
-    sudo mv ./kubectl /usr/local/bin/kubectl
-   ```
+#!/bin/bash
+#1) Create Ubuntu EC2 instance in AWS and create kops user
+   sudo adduser kop
+   sudo echo "kop  ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/kop
+   sudo su - kop
 
-1. Install kops on ubuntu instance
-   ```sh
-    curl -LO https://github.com/kubernetes/kops/releases/download/$(curl -s https://api.github.com/repos/kubernetes/kops/releases/latest | grep tag_name | cut -d '"' -f 4)/kops-linux-amd64
-    chmod +x kops-linux-amd64
-    sudo mv kops-linux-amd64 /usr/local/bin/kops
-    ```
-1. Create an IAM user/role  with Route53, EC2, IAM and S3 full access
+#2) install AWSCLI
 
-1. Attach IAM role to ubuntu instance
-   ```sh
-   # Note: If you create IAM user with programmatic access then provide Access keys. Otherwise region information is enough
-   aws configure
-    ```
+ sudo apt update -y
+ sudo apt install unzip wget -y
+ sudo curl https://s3.amazonaws.com/aws-cli/awscli-bundle.zip -o awscli-bundle.zip
+ sudo apt install unzip python -y
+ sudo unzip awscli-bundle.zip
+ sudo ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+ 
+ 
+#3) Install kops software on ubuntu instance:
 
-1. Create a Route53 private hosted zone (you can create Public hosted zone if you have a domain)
-   ```sh
-   Routeh53 --> hosted zones --> created hosted zone  
-   Domain Name: valaxy.net
-   Type: Private hosted zone for Amzon VPC
-   ```
+   #Install wget if not installed
+   sudo apt install wget -y
+   sudo wget https://github.com/kubernetes/kops/releases/download/v1.22.0/kops-linux-amd64
+   sudo chmod +x kops-linux-amd64
+   sudo mv kops-linux-amd64 /usr/local/bin/kops
+ 
+#4) Install kubectl = command line utility for kubernetes
 
-1. create an S3 bucket
-   ```sh
-    aws s3 mb s3://demo.k8s.valaxy.net
-   ```
-1. Expose environment variable:
-   ```sh
-    export KOPS_STATE_STORE=s3://demo.k8s.valaxy.net
-   ```
+ sudo curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+ sudo chmod +x ./kubectl
+ sudo mv ./kubectl /usr/local/bin/kubectl
+ 
+ 
+ 
+ aws s3 mb s3://honeywell.local
+ aws s3 ls
 
-1. Create sshkeys before creating cluster
-   ```sh
+# 5) Create an IAM role from AWS Console or CLI with below Policies.
+
+  AmazonEC2FullAccess  = ecs instances
+  AmazonS3FullAccess   = key-value-store 
+  IAMFullAccess        = 
+  AmazonVPCFullAccess  = vpc 
+    user cannot manage billing 
+
+
+Then Attach IAM role to ubuntu server from Console Select KOPS Server --> Actions --> 
+    Instance Settings/Security --> Attach/Replace IAM Role --> Select the role which
+You Created. --> Save.
+   
+
+
+#6) create an S3 bucket Execute below commond in KOPS Server use unique bucket name if you get bucket name exists error.
+
+  
+  aws s3 mb s3://landmark.local
+  aws s3 ls
+  
+    ex:
+  S3 bucket name should be unique across AWS accounts 
+  aws s3 mb s3://simonlegah.k8s.local    s3://nubong.k8s.local
+     
+  Expose environment variable:
+
+    # Add env variables in bashrc
+    vi .bashrc
+  
+  # Give Unique Name And S3 Bucket which you created.
+  export NAME=honey.k8s.local
+  export KOPS_STATE_STORE=s3://honey.k8s.local
+ 
+    source .bashrc
+  
+#7) Create sshkeys before creating cluster
+
     ssh-keygen
-   ```
+ 
 
-1. Create kubernetes cluster definitions on S3 bucket
-   ```sh
-   kops create cluster --cloud=aws --zones=ap-south-1b --name=demo.k8s.valaxy.net --dns-zone=valaxy.net --dns private 
-    ```
+# 8)Create kubernetes cluster definitions on S3 bucket
 
-1. Create kubernetes cluser
-    ```sh
-    kops update cluster demo.k8s.valaxy.net --yes
-    ```
+kops create cluster --zones us-east-2b --networking weave --master-size t2.medium --master-count 1 --node-size t2.medium --node-count=2 ${NAME}
+  
+# 8b. copy sshkeys into the cluster
+kops create secret --name ${NAME} sshpublickey admin -i ~/.ssh/id_rsa.pub
 
-1. Validate your cluster
-     ```sh
-      kops validate cluster
-    ```
+# 9) Create kubernetes cluser
 
-1. To list nodes
-   ```sh
-   kubectl get nodes
-   ```
+   kops update cluster --name honey.k8s.local --yes --admin
 
-1. To delete cluster
-    ```sh
-     kops delete cluster demo.k8s.valaxy.net --yes
-    ```
+# 10) Validate your cluster(KOPS will take some time to create cluster ,Execute below commond after 10  mins)
+
+     kops validate cluster honey.k8s.local
+ 
+# 11) To list nodes
+
+    kubectl get nodes 
+  
+ # connect to your master node
+sh -i ~/.ssh/id_rsa ubuntu@ipAddress
+ssh -i ~/.ssh/id_rsa ubuntu@3.90.203.23
+#Get the master node ipAddress 
+
+ kubectl get all 
+ kubectl get pod
+ 
+  # 12) To Delete Cluster
+
+   kops delete cluster --name=${NAME} --state=${KOPS_STATE_STORE} --yes  
+   
+kops update cluster --name honey.k8s.local --yes --admin
    
 #### Deploying Nginx pods on Kubernetes
 1. Deploying Nginx Container
